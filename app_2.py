@@ -3,27 +3,29 @@ import pandas as pd
 import numpy as np
 import datetime
 import altair as alt
-import pydeck as pdk
+import folium
+from streamlit_folium import st_folium
+from geopy.distance import geodesic
+from streamlit_geolocation import streamlit_geolocation
 from fare_model import calculate_fare
 
-# --- Responsive CSS for mobile layout ---
-st.markdown(
-    '''
+# --- Mobile-Friendly Layout ---
+st.markdown("""
     <style>
-    @media (max-width: 768px) {
-        .block-container {
-            padding: 1rem;
+    @media (max-width: 600px) {
+        .stApp .block-container {
+            padding: 0.5rem !important;
+        }
+        label, .stSelectbox label {
+            font-size: 0.9rem !important;
         }
     }
     </style>
-    ''',
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
-# --- Language Selector ---
+# --- Language Support ---
 lang = st.sidebar.selectbox("🌐 Choose Language", ["English", "Krio"])
 
-# --- Localization dictionary ---
 L = {
     "English": {
         "title": "🚖 Dynamic Public Transport Fare Estimator – Freetown",
@@ -50,8 +52,8 @@ L = {
         "distance_km": "Distance (km)",
         "estimated": "Estimated Fare (SLL)",
         "visual_compare": "### 🔍 Visual Comparison",
-        "map_section": "🗺️ Map Visualization",
-        "show_map": "Show Map"
+        "map_header": "🗺️ Click on the Map to Measure Route Distance",
+        "your_location": "📍 Your current location"
     },
     "Krio": {
         "title": "🚖 Transpɔt Fɛr Estimeita – Fritɔn",
@@ -78,91 +80,99 @@ L = {
         "distance_km": "Dɔns (km)",
         "estimated": "Fɛr (SLL)",
         "visual_compare": "### 🔍 Fɛr Chaat",
-        "map_section": "🗺️ Mɔp",
-        "show_map": "Shɔ Mɔp"
+        "map_header": "🗺️ Klik Map fɔ Mɛshɔ Dɔns",
+        "your_location": "📍 Yuh Lokeshɔn"
     }
 }[lang]
 
 st.title(L["title"])
 
-# --- Input Form ---
+# --- Detect User Location ---
+user_lat, user_lon = 8.48, -13.23  # Default to Freetown
+
+if location and location.get("latitude") and location.get("longitude"):
+    user_lat = location["latitude"]
+    user_lon = location["longitude"]
+    st.success(f"{L['your_location']}: ({user_lat:.4f}, {user_lon:.4f})")
+else:
+    st.warning("📍 Location not detected or permission denied. Using default (Freetown).")
+
+
+# --- Map Interaction for Distance Measurement ---
+with st.expander(L["map_header"]):
+    if "clicks" not in st.session_state:
+        st.session_state["clicks"] = []
+
+    m = folium.Map(location=[user_lat, user_lon], zoom_start=12)
+
+    for pt in st.session_state["clicks"]:
+        folium.Marker([pt["lat"], pt["lng"]]).add_to(m)
+
+    map_data = st_folium(m, height=400, key="map")
+
+    if map_data and map_data.get("last_clicked"):
+        if len(st.session_state["clicks"]) < 2:
+            st.session_state["clicks"].append(map_data["last_clicked"])
+
+    if len(st.session_state["clicks"]) == 2:
+        pt1, pt2 = st.session_state["clicks"]
+        distance_km = geodesic((pt1["lat"], pt1["lng"]), (pt2["lat"], pt2["lng"])).km
+        st.success(f"📏 Measured Distance: {distance_km:.2f} km")
+    else:
+        distance_km = st.number_input(L["distance"], min_value=0.0, step=0.1)
+
+# --- Form Inputs ---
 vehicle_type = st.selectbox(L["vehicle_type"], ["minibus", "keke", "taxi", "motorbike", "paratransit bus", "formal bus"])
-distance_km = st.number_input(L["distance"], min_value=0.0, step=0.1)
 fuel_price = st.number_input(L["fuel_price"], min_value=0, value=30000)
 traffic_level = st.selectbox(L["traffic"], ["low", "moderate", "heavy"])
 weather_condition = st.selectbox(L["weather"], ["clear", "cloudy", "rainy", "stormy"])
 traffic_period = st.selectbox(L["period"], ["morning peak", "afternoon peak", "evening peak", "off-peak"])
 day_type = st.radio(L["day"], ["weekday", "weekend"])
 
+# --- Fare Calculation ---
 if st.button(L["calculate"]):
     fare, breakdown = calculate_fare(vehicle_type, distance_km, fuel_price, traffic_level,
                                      weather_condition, traffic_period, day_type)
     st.success(f"{L['fare_estimate']}: **{int(fare):,} SLL**")
-
     with st.expander(L["fare_breakdown"]):
-        st.write(L["fare_components"])
+        df = pd.DataFrame.from_dict({k: [v] for k, v in breakdown.items() if k != "Weekend Multiplier"})
+        st.dataframe(df.T.rename(columns={0: "SLL"}), use_container_width=True)
 
-        breakdown_chart_data = {
-            k: v for k, v in breakdown.items()
-            if k not in ["Weekend Multiplier", "Total Fare"]
-        }
-
-        df_breakdown = pd.DataFrame(list(breakdown_chart_data.items()), columns=["Component", "Amount (SLL)"])
-        st.dataframe(df_breakdown, use_container_width=True)
-        st.bar_chart(df_breakdown.set_index("Component"))
-
-# --- Map Section ---
-with st.expander(L["map_section"]):
-    lat, lon = 8.4844, -13.2344
-    st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}))
-
-# --- Trend Simulation ---
+# --- Fare Trend Simulation ---
 st.subheader(L["fare_trend"])
-
 with st.expander(L["simulate_trend"]):
-    trend_days = st.slider(L["trend_days"], min_value=1, max_value=30, value=7)
-    base_date = st.date_input(L["start_date"], datetime.date.today())
-
+    trend_days = st.slider(L["trend_days"], 1, 30, 7)
+    start_date = st.date_input(L["start_date"], datetime.date.today())
     if st.button(L["generate_trend"]):
-        dates = [base_date + datetime.timedelta(days=i) for i in range(trend_days)]
-        fuel_prices = np.linspace(fuel_price, fuel_price + 5000, trend_days)
-        day_types = ["weekday" if d.weekday() < 5 else "weekend" for d in dates]
-
-        trend_data = []
+        trend = []
         for i in range(trend_days):
-            fare, _ = calculate_fare(vehicle_type, distance_km, fuel_prices[i], traffic_level,
-                                     weather_condition, traffic_period, day_types[i])
-            trend_data.append({"Date": dates[i], L["estimated"]: fare})
+            date = start_date + datetime.timedelta(days=i)
+            fuel_sim = fuel_price + i * 200
+            daytype = "weekday" if date.weekday() < 5 else "weekend"
+            fare, _ = calculate_fare(vehicle_type, distance_km, fuel_sim, traffic_level,
+                                     weather_condition, traffic_period, daytype)
+            trend.append({"Date": date, L["estimated"]: fare})
+        df_trend = pd.DataFrame(trend).set_index("Date")
+        st.line_chart(df_trend)
 
-        df_trend = pd.DataFrame(trend_data)
-        st.line_chart(df_trend.set_index("Date"))
-
-# --- Comparison ---
+# --- Route Comparison ---
 st.subheader(L["comparison"])
-
 with st.expander(L["compare_label"]):
-    num_routes = st.slider("Number of comparisons", 1, 5, 2)
-    comparison_data = []
-
-    for i in range(num_routes):
-        st.markdown(f"#### {L['scenario']} {i+1}")
+    rows = st.slider("Routes", 1, 5, 2)
+    comp = []
+    for i in range(rows):
         col1, col2, col3 = st.columns(3)
         with col1:
             v = st.selectbox(f"{L['vehicle']} {i+1}", ["minibus", "keke", "taxi", "motorbike", "paratransit bus", "formal bus"], key=f"v_{i}")
         with col2:
-            d = st.number_input(f"{L['distance_km']} {i+1}", min_value=0.0, step=0.1, key=f"d_{i}")
+            d = st.number_input(f"{L['distance_km']} {i+1}", 0.0, 100.0, key=f"d_{i}")
         with col3:
-            f = st.number_input(f"{L['fuel_price']} {i+1}", min_value=0, value=fuel_price, key=f"f_{i}")
-
+            f = st.number_input(f"{L['fuel_price']} {i+1}", 0, value=30000, key=f"f_{i}")
         fare, _ = calculate_fare(v, d, f, traffic_level, weather_condition, traffic_period, day_type)
-        comparison_data.append({L["scenario"]: f"#{i+1}", L["vehicle"]: v, L["distance_km"]: d, "Fuel Price": f, L["estimated"]: fare})
-
-    if comparison_data:
-        df_comparison = pd.DataFrame(comparison_data)
-        st.dataframe(df_comparison)
-        st.write(L["visual_compare"])
-        bar_chart = alt.Chart(df_comparison).mark_bar().encode(
-            x=L["scenario"], y=L["estimated"], color=L["vehicle"],
-            tooltip=[L["vehicle"], L["distance_km"], "Fuel Price", L["estimated"]]
-        ).properties(height=400)
-        st.altair_chart(bar_chart, use_container_width=True)
+        comp.append({L["scenario"]: f"#{i+1}", L["vehicle"]: v, L["distance_km"]: d, "Fuel Price": f, L["estimated"]: fare})
+    df = pd.DataFrame(comp)
+    st.dataframe(df, use_container_width=True)
+    st.altair_chart(alt.Chart(df).mark_bar().encode(
+        x=L["scenario"], y=L["estimated"], color=L["vehicle"],
+        tooltip=[L["vehicle"], L["distance_km"], "Fuel Price", L["estimated"]]
+    ).properties(height=400), use_container_width=True)
