@@ -88,14 +88,18 @@ L = {
 st.title(L["title"])
 
 # --- Detect User Location ---
-user_lat, user_lon = 8.48, -13.23  # Default to Freetown
 
-if location and location.get("latitude") and location.get("longitude"):
+location = streamlit_geolocation()
+
+if location and location["latitude"] is not None and location["longitude"] is not None:
     user_lat = location["latitude"]
     user_lon = location["longitude"]
-    st.success(f"{L['your_location']}: ({user_lat:.4f}, {user_lon:.4f})")
+    st.success(f"📍 Your current location: ({user_lat:.4f}, {user_lon:.4f})")
 else:
-    st.warning("📍 Location not detected or permission denied. Using default (Freetown).")
+    st.warning("📍 Waiting for location permission or unable to fetch coordinates.")
+    user_lat, user_lon = 8.48, -13.23  # Default to Freetown
+
+
 
 
 # --- Map Interaction for Distance Measurement ---
