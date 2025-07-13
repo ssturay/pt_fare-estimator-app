@@ -6,7 +6,7 @@ import altair as alt
 import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
-from streamlit_geolocation import streamlit_geolocation
+from streamlit_geolocation import geolocation
 from fare_model import calculate_fare
 
 # --- Mobile-Friendly Layout ---
