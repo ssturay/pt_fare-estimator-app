@@ -28,7 +28,7 @@ lang = st.sidebar.selectbox("🌐 Choose Language", ["English", "Krio"])
 
 L = {
     "English": {
-        "title": "🚖 Freetown Public Transport Fare Estimator (FEsApp)",
+        "title": "🚖 Freetown Public Transport Fare Estimator - FEsApp",
         "vehicle_type": "Select vehicle type",
         "distance": "Enter distance (km)",
         "fuel_price": "Enter current fuel price (SLL)",
@@ -56,7 +56,7 @@ L = {
         "your_location": "📍 Your current location"
     },
     "Krio": {
-        "title": "🚖 Fritɔn Transpɔt Fɛr Estimator",
+        "title": "🚖 Fritɔn Transpɔt Fɛr Estimator - FEsApp",
         "vehicle_type": "Chuz di kaind transpɔt",
         "distance": "Wos dɔns (km)",
         "fuel_price": "Put di fɔyəl pris (SLL)",
