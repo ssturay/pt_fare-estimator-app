@@ -11,8 +11,8 @@ from fare_model import calculate_fare
 
 
 # Simple login credentials (can be moved to st.secrets for security)
-username = "admin"
-password = "mypassword123"
+username = "adminsst"
+password = "isst@2025"
 
 # === Login system using secrets ===
 def login():
