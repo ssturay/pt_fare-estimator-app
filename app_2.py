@@ -9,6 +9,40 @@ from geopy.distance import geodesic
 from streamlit_geolocation import streamlit_geolocation
 from fare_model import calculate_fare
 
+
+# Simple login credentials (can be moved to st.secrets for security)
+username = "admin"
+password = "mypassword123"
+
+# === Login system using secrets ===
+def login():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if not st.session_state.authenticated:
+        with st.form("Login"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Login")
+
+            if submitted:
+                correct_user = st.secrets["credentials"]["username"]
+                correct_pass = st.secrets["credentials"]["password"]
+
+                if username == correct_user and password == correct_pass:
+                    st.session_state.authenticated = True
+                    st.success("Login successful!")
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
+
+    return st.session_state.authenticated
+
+# === Authenticate before running app ===
+if not login():
+    st.stop()
+
+
 # --- Mobile-Friendly Layout ---
 st.markdown("""
     <style>
